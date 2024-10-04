@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PBR Master</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script> <!-- Include Three.js -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three/examples/jsm/"
+        }
+      }
+    </script>
+    <style>
+        /* Style for pattern buttons and preview areas */
+        .pattern-1, .pattern-2, .pattern-3, .pattern-4 {
+            box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+            background-color: rgb(24 24 27);
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: cover; /* Make the image fit within the button */
+        }
+
+        .pattern-1 { background-image: none; }
+        .pattern-2 { background-image: none; }
+        .pattern-3 { background-image: none; }
+        .pattern-4 { background-image: none; }
+        .preview, .large-preview {
+            background-position: center;
+            background-repeat: no-repeat;
+            box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+        }
+        .large-preview {
+            width: 80%;
+            height: 90%;
+            border-radius: 8px;
+            border: 0px solid #ddd;
+            background-size: contain; /* Fit the image within the container */
+            background-position: center; /* Center the image */
+            background-repeat: no-repeat; /* Prevent tiling */
+        }
+        .drop-area {
+            border: 2px dashed #aaa;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            transition: border-color 0.3s;
+            background-size: cover; /* Cover the area with the image */
+            background-position: center; /* Center the image */
+            background-repeat: no-repeat;
+        }
+        .drop-area.hover {
+            border-color: #3b82f6; /* Blue border on hover */
+            background-color: rgba(59, 130, 246, 0.1); /* Light blue background on hover */
+            }
+
+        /* Styles for disabled buttons */
+        button:disabled {
+            background-color: #4b5563; /* Darker color for the disabled state */
+            cursor: not-allowed; /* Change cursor to indicate it's not clickable */
+            opacity: 0.6; /* Make it semi-transparent to indicate disabled */
+        }
+        .three-js-canvas {
+            border: 1px solid #ddd; /* Optional: Border for the canvas */
+            width: 300px;
+            height: 300px;
+            transform-origin: top left; /* Ensure scaling happens from top left */
+            transform: scale(1); /* Start with no scale (1), can be changed dynamically */
+            transition: transform 0.3s ease; /* Smooth transition for scaling */
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 h-screen flex">
+    <script type="module" src="main/templates/main.js"></script>
+
+    <!-- CSRF Token -->
+    <input type="hidden" id="csrfToken" value="{{ csrf_token }}">
+
+    <!-- Left Sidebar -->
+    <div class="w-80 h-full bg-zinc-800 shadow-2xl text-white p-4 flex flex-col">
+        <h2 class="text-lg font-semibold mb-4">PBR Master</h2>
+
+        <!-- Tabs -->
+        <div class="flex flex-row space-x-4 mb-4">
+            <button class="text-blue-400 border-b-2 border-blue-400 pb-1">PBR</button>
+            <button class="text-gray-500 hover:text-blue-400" disabled >Stylized</button>
+            <button class="text-gray-500 hover:text-blue-400" disabled >Pixaled</button>
+        </div>
+
+        <!-- Drag-and-Drop Area with File Input -->
+        <div id="dropArea" class="drop-area h-32 mb-4 rounded-lg preview" ondragover="event.preventDefault();" ondrop="handleDrop(event);">
+            Drop your image here or <span class="underline cursor-pointer" onclick="document.getElementById('fileInput').click()">browse</span>
+            <input type="file" id="fileInput" accept="image/*" style="display: none;"  />
+        </div>
+
+        <!-- Pattern options -->
+        <div class="flex justify-between items-center space-x-2 mb-8">
+            <button class="pattern-1 w-12 h-12 rounded-lg" id="pattern1" onclick="showPreview('normal')" style="background-image: none;"></button>
+            <button class="pattern-2 w-12 h-12 rounded-lg" id="pattern2" onclick="showPreview('roughness')" style="background-image: none;"></button>
+            <button class="pattern-3 w-12 h-12 rounded-lg" id="pattern3" onclick="showPreview('metalness')" style="background-image: none;"></button>
+            <button class="pattern-4 w-12 h-12 rounded-lg" id="pattern4" onclick="showPreview('displacement')" style="background-image: none;"></button>
+        </div>
+
+        <!-- Dynamic Settings Panel -->
+        <div id="settingsPanel">
+            <!-- NORMAL MAP Settings -->
+            <div id="normalMapSettings" class="map-settings">
+                <div class="mb-4">
+                    <label class="block text-sm text-gray-400">Normal Strength</label>
+                    <input type="range" class="w-full h-2 bg-gray-600 rounded-lg"
+                        min="1"
+                        max="10"
+                        step="1"
+                        value="2"
+                        id="normalStrengthInput"/>
+                    <ul class="flex justify-between w-full px-[10px] space-x-2 mb-4">
+                        <li><span>1</span></li>
+                        <li><span>2</span></li>
+                        <li><span>3</span></li>
+                        <li><span>4</span></li>
+                        <li><span>5</span></li>
+                        <li><span>6</span></li>
+                        <li><span>7</span></li>
+                        <li><span>8</span></li>
+                        <li><span>9</span></li>
+                        <li><span>10</span></li>
+                    </ul>
+                    <label>
+                        <input type="checkbox" class="mb-4"> Invert height
+                    </label>
+                </div>
+            </div>
+
+            <!-- ROUGHNESS MAP Settings -->
+            <div id="roughnessMapSettings" class="map-settings hidden">
+                <div class="mb-4">
+                    <label class="block text-sm text-gray-400">Roughness Strength</label>
+                    <input type="range" class="w-full h-2 bg-gray-600 rounded-lg"
+                        min="1"
+                        max="10"
+                        step="1"
+                        value="5"
+                        id="roughnessStrengthInput"/>
+                    <ul class="flex justify-between w-full px-[10px] space-x-2 mb-4">
+                        <li><span>1</span></li>
+                        <li><span>2</span></li>
+                        <li><span>3</span></li>
+                        <li><span>3</span></li>
+                        <li><span>4</span></li>
+                        <li><span>5</span></li>
+                        <li><span>6</span></li>
+                        <li><span>7</span></li>
+                        <li><span>8</span></li>
+                        <li><span>9</span></li>
+                        <li><span>10</span></li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- METALNESS MAP Settings -->
+            <div id="metalnessMapSettings" class="map-settings hidden">
+                <div class="mb-4">
+                    <label class="block text-sm text-gray-400">Metalness Strength</label>
+                    <input type="range" class="w-full h-2 bg-gray-600 rounded-lg"
+                        min="20"
+                        max="220"
+                        step="20"
+                        value="60"
+                        id="metalnessStrengthInput"/>
+                    <ul class="flex justify-between w-full px-[10px] space-x-2 mb-4">
+                        <li><span>20</span></li>
+                        <li><span>40</span></li>
+                        <li><span>60</span></li>
+                        <li><span>80</span></li>
+                        <li><span>120</span></li>
+                        <li><span>140</span></li>
+                        <li><span>160</span></li>
+                        <li><span>180</span></li>
+                        <li><span>200</span></li>
+                        <li><span>220</span></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+            <!-- DISPLACEMENT MAP Settings -->
+            <div id="displacementMapSettings" class="map-settings hidden">
+                <div class="mb-4">
+                    <label class="block text-sm text-gray-400">Displacement Strength</label>
+                    <input type="range" class="w-full h-2 bg-gray-600 rounded-lg"
+                        min="1"
+                        max="10"
+                        step="1"
+                        value="1"
+                        id="displacementStrengthInput"/>
+                    <ul class="flex justify-between w-full px-[10px] space-x-2 mb-4">
+                        <li><span>1</span></li>
+                        <li><span>2</span></li>
+                        <li><span>3</span></li>
+                        <li><span>3</span></li>
+                        <li><span>4</span></li>
+                        <li><span>5</span></li>
+                        <li><span>6</span></li>
+                        <li><span>7</span></li>
+                        <li><span>8</span></li>
+                        <li><span>9</span></li>
+                        <li><span>10</span></li>
+                    </ul>
+                </div>
+            </div>
+        <!-- Buttons -->
+        <div class="flex flex-col space-y-2 mt-auto">
+            <button id="generateButton" class="w-full bg-blue-500 hover:bg-blue-600 rounded-lg py-2 h-12" onclick="generateMaps()" disabled>
+                Generate
+            </button>
+
+            <button id="loadingButton" class="w-full bg-blue-500 rounded-lg py-2 hidden flex items-center justify-center h-12">
+                <svg class="animate-spin h-5 w-5 mr-3 text-white" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0114.4-5.6l1.4 1.4A10 10 0 003 12z"></path>
+                </svg>
+                Processing...
+            </button>
+
+            <button id="exportButton" class="w-full bg-green-500 hover:bg-green-600 rounded-lg py-2 h-12" onclick="exportTextures()" disabled>
+                Export Textures
+            </button>
+        </div>
+    </div>
+
+    <!-- Center Content Area -->
+    <div class="w-full h-full bg-zinc-900 p-4 flex flex-col">
+        <div class="flex w-full h-full justify-center items-center mb-4">
+            <div id="largePreview" class="large-preview bg-zinc-700"></div>
+        </div>
+    </div>
+
+    <!-- Right Sidebar for Ads -->
+    <div class="w-80 h-full bg-zinc-800 shadow-2xl text-white p-4 flex flex-col items-center">
+        <h2 class="text-lg font-semibold mb-4">Ads</h2>
+        <div class="bg-gray-600 w-72 h-40 mb-4 rounded-lg" style="width: 300px; height: 250px;"></div>
+        <div class="bg-gray-600 w-72 h-40 mb-4 rounded-lg" style="width: 300px; height: 250px;"></div>
+        <div class="bg-gray-600 w-72 h-40 mb-4 rounded-lg" style="width: 300px; height: 250px;"></div>
+        <!-- <div class="bg-gray-600 w-72 h-40 mb-4 rounded-lg" id="three-js-preview" style="width: 300px; height: 300px"></div> -->
+    </div>
+
+    <script>
+        function showPreview(mapType) {
+            const largePreview = document.getElementById('largePreview');
+
+            // Set the background image based on the map type
+            if (mapType === 'normal') {
+                largePreview.style.backgroundImage = `url('${normalMapUrl}')`; // Use stored URL
+            } else if (mapType === 'roughness') {
+                largePreview.style.backgroundImage = `url('${roughnessMapUrl}')`; // Use stored URL
+            }
+            else if (mapType === 'metalness') {
+                largePreview.style.backgroundImage = `url('${metalnessMapUrl}')`; // Use stored URL
+            }
+            else if (mapType === 'displacement') {
+                largePreview.style.backgroundImage = `url('${displacementMapUrl}')`; // Use stored URL
+            }
+
+            // Hide all map settings
+            const settingsPanels = document.querySelectorAll('.map-settings');
+            settingsPanels.forEach(panel => panel.classList.add('hidden'));
+
+            // Show settings based on the selected map type
+            if (mapType === 'normal') {
+                document.getElementById('normalMapSettings').classList.remove('hidden');
+            } else if (mapType === 'roughness') {
+                document.getElementById('roughnessMapSettings').classList.remove('hidden');
+            }
+            else if (mapType === 'metalness') {
+                document.getElementById('metalnessMapSettings').classList.remove('hidden');
+            }
+            else if (mapType === 'displacement') {
+                document.getElementById('displacementMapSettings').classList.remove('hidden');
+            }
+        }
+
+        // Assign dropped file to the file input
+        function handleDrop(event) {
+            event.preventDefault();
+            const file = event.dataTransfer.files[0];
+
+            if (file && file.type.startsWith('image/')) {
+                previewFile(file);  // Call the preview function
+
+                // Manually set the file input value with the dropped file
+                const fileInput = document.getElementById('fileInput');
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                fileInput.files = dataTransfer.files;  // Assign the dropped file to the file input
+            } else {
+                alert('Please drop a valid image file.');
+            }
+        }
+
+        // Handle drag over event to allow dropping files
+        const dropArea = document.getElementById('dropArea');
+
+        dropArea.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            dropArea.classList.add('hover'); // Add the hover effect for visual feedback
+        });
+
+        dropArea.addEventListener('dragleave', () => {
+            dropArea.classList.remove('hover'); // Remove hover effect when drag leaves the area
+        });
+
+        dropArea.addEventListener('drop', (event) => {
+            event.preventDefault();
+            dropArea.classList.remove('hover'); // Remove hover effect after dropping
+
+            const file = event.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                previewFile(file);
+            } else {
+                alert('Please drop a valid image file.');
+            }
+        });
+
+        // Preview function remains the same
+        function previewFile(file) {
+            const reader = new FileReader();
+            let colorMapUrl = file;
+
+            reader.onload = (e) => {
+                // Set the background image of the drop area
+                const dropArea = document.getElementById('dropArea');
+                dropArea.style.backgroundImage = `url('${e.target.result}')`;
+                dropArea.style.backgroundSize = 'cover'; // Ensure the image covers the area
+
+                // Set the large preview background image
+                document.getElementById('largePreview').style.backgroundImage = `url('${e.target.result}')`;
+
+                // Enable the generate button
+                document.getElementById('generateButton').disabled = false;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Enable the generate button if an image is selected when file input changes
+        document.getElementById('fileInput').addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                previewFile(file); // Preview the file when selected
+            } else {
+                document.getElementById('generateButton').disabled = true; // Disable if no file is selected
+            }
+        });
+
+        // Enable the generate button if an image is selected when file input changes
+        document.getElementById('fileInput').addEventListener('change', function() {
+            const file = this.files[0];
+            document.getElementById('generateButton').disabled = !file; // Disable if no file is selected
+        });
+
+        let normalMapUrl, roughnessMapUrl, metalnessMapUrl, displacementMapUrl; // Store the generated map URLs
+        function generateMaps() {
+            const fileInput = document.querySelector('input[type=file]');
+
+            const normal_strength = document.getElementById('normalStrengthInput').value;
+            const normal_invert_height = document.querySelector('input[type=checkbox]').checked;
+
+            const roughness_strength = document.getElementById('roughnessStrengthInput').value;
+            const metalness_strength = document.getElementById('metalnessStrengthInput').value;
+            const displacement_strength = document.getElementById('displacementStrengthInput').value;
+
+            const formData = new FormData();
+            // Normal map
+            formData.append('image', fileInput.files[0]);
+            formData.append('normal_strength', normal_strength);
+            formData.append('normal_invert_height', normal_invert_height);
+
+            // Roughness map
+            formData.append('roughness_strength', roughness_strength);
+
+            // Metalness map
+            formData.append('metalness_strength', metalness_strength);
+
+            // Displacement map
+            formData.append('displacement_strength', displacement_strength);
+
+            const csrfToken = document.getElementById('csrfToken').value;
+
+            document.getElementById('generateButton').classList.add('hidden');
+            document.getElementById('loadingButton').classList.remove('hidden');
+
+            fetch('/generate-maps/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                },
+                body: formData,
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                colorMapUrl = `${data.color_map_url}`;
+                // colorMapUrl = `${data.color_map_url}?t=${new Date().getTime()}`;
+                normalMapUrl = `${data.normal_map_url}?t=${new Date().getTime()}`;
+                roughnessMapUrl = `${data.roughness_map_url}?t=${new Date().getTime()}`;
+                metalnessMapUrl = `${data.metalness_map_url}?t=${new Date().getTime()}`;
+                displacementMapUrl = `${data.displacement_map_url}?t=${new Date().getTime()}`;
+
+                // Update large preview with the normal map
+                document.getElementById('largePreview').style.backgroundImage = `url('${normalMapUrl}')`;
+                document.getElementById('pattern1').style.backgroundImage = `url('${normalMapUrl}')`;
+                document.getElementById('pattern2').style.backgroundImage = `url('${roughnessMapUrl}')`;
+                document.getElementById('pattern3').style.backgroundImage = `url('${metalnessMapUrl}')`;
+                document.getElementById('pattern4').style.backgroundImage = `url('${displacementMapUrl}')`;
+
+                // Enable the export button after successful texture generation
+                document.getElementById('exportButton').disabled = false;
+            })
+            .catch(error => {
+                console.error('Error generating maps:', error);
+                alert(`Failed to generate maps: ${error.message}`);
+            })
+            .finally(() => {
+                document.getElementById('loadingButton').classList.add('hidden');
+                document.getElementById('generateButton').classList.remove('hidden');
+            });
+        }
+
+        function exportTextures() {
+            const csrfToken = document.getElementById('csrfToken').value; // Get the CSRF token
+
+            // Send request to export textures
+            fetch('/export-textures/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken // Include CSRF token in headers
+                },
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.blob(); // Expecting a binary response for download
+            })
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'textures.zip'; // Name of the zip file
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url); // Clean up
+            })
+            .catch(error => {
+                console.error('There was a problem with the fetch operation:', error);
+            });
+        }
+
+        // Ensure the DOM is fully loaded before running the script
+        document.addEventListener('DOMContentLoaded', () => {
+            // Set up the scene, camera, and renderer
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 1.2;
+
+            const renderer = new THREE.WebGLRenderer();
+            renderer.setSize(300, 300); // Fixed size 300x300
+            const previewElement = document.getElementById('three-js-preview');
+            previewElement.appendChild(renderer.domElement);
+
+            // Load textures
+            const textureLoader = new THREE.TextureLoader();
+            const colorTexture = textureLoader.load('/media/5bb933ce5a2ab0352ad169962cf2f370.jpg'); // Replace with the actual file path
+            const normalTexture = textureLoader.load('/media/5bb933ce5a2ab0352ad169962cf2f370_Normal.jpg'); 
+            const roughnessTexture = textureLoader.load('/media/5bb933ce5a2ab0352ad169962cf2f370_Roughness.jpg'); 
+            const displacementTexture = textureLoader.load('/media/5bb933ce5a2ab0352ad169962cf2f370_Displacement.jpg'); 
+            
+            // Get roughness, normal, and metalness input elements
+            const roughnessStrengthInput = document.getElementById('roughnessStrengthInput');
+            const normalStrengthInput = document.getElementById('normalStrengthInput');
+            const metalnessStrengthInput = document.getElementById('metalnessStrengthInput'); // Add this to your HTML
+            const displacementStrengthInput = document.getElementById('displacementStrengthInput'); // Add this to your HTML
+
+            // Create a plane geometry and material with PBR textures
+            const geometry = new THREE.PlaneGeometry(1, 1); // Create a 1x1 plane
+            const material = new THREE.MeshStandardMaterial({
+                map: colorTexture,
+                normalMap: normalTexture,
+                roughnessMap: roughnessTexture, // Ensure this is loaded correctly
+                displacementMap: displacementTexture,
+                side: THREE.DoubleSide
+            });
+
+            const plane = new THREE.Mesh(geometry, material);
+            scene.add(plane);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x404040, 1.5); // Soft white light
+            scene.add(ambientLight);
+
+            const pointLight = new THREE.PointLight(0xffffff, 1, 100); // Moving point light
+            pointLight.position.set(1, 0, 1); // Start at the right
+            scene.add(pointLight);
+
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+            });
+
+            // Animate the scene
+            let lightDirection = -0.01; // Control light movement speed
+
+            function animate() {
+                requestAnimationFrame(animate);
+
+                // Move the light from right to left and back
+                pointLight.position.x += lightDirection;
+                if (pointLight.position.x < -1.5 || pointLight.position.x > 1.5) {
+                    lightDirection *= -1; // Reverse direction
+                }
+
+                // Update roughness and normal map strength from the input values
+                // material.roughness = parseFloat(roughnessStrengthInput.value);
+                // material.normalScale = new THREE.Vector2(parseFloat(normalStrengthInput.value), parseFloat(normalStrengthInput.value)); // Update normal scale
+                // material.metalness = parseFloat(metalnessStrengthInput.value); // Update metalness dynamically
+                // material.displacementScale = parseFloat(displacementStrengthInput.value); // Update displacement dynamically
+
+                renderer.render(scene, camera);
+            }
+
+            animate();
+        });
+    </script>
+</body>
+</html>
